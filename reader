@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart TTS System</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap');
+        body {
+            font-family: "Poppins", sans-serif;
+            background: linear-gradient(to right, #ff9a9e, #fad0c4);
+            text-align: center;
+            padding: 20px;
+            transition: background 0.3s ease-in-out;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            max-width: 700px;
+            margin: auto;
+        }
+        #textInput {
+            width: 90%;
+            height: 300px;
+            padding: 10px;
+            border: 2px solid #ff758c;
+            border-radius: 10px;
+            font-size: 18px;
+            overflow-y: auto;
+            text-align: left;
+            background: white;
+        }
+        span { transition: color 0.2s ease; }
+        button {
+            background: #ff758c;
+            color: white;
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>📢 Smart TTS System 🎤</h2>
+
+      
+        <div id="textInput" contenteditable="true" placeholder="Paste or type your text here..."></div><br>
+		
+		  <label for="fileInput">📂 Upload File:</label>
+        <input type="file" id="fileInput"><br><br>
+
+        <label for="language">🌍 Select Language:</label>
+        <select id="language">
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (British)</option>
+            <option value="fr-FR">French</option>
+            <option value="es-ES">Spanish</option>
+            <option value="de-DE">German</option>
+            <option value="hi-IN">Hindi</option>
+            <option value="zh-CN">Chinese (Mandarin)</option>
+            <option value="sw-KE">Swahili</option>
+        </select><br>
+<br><br>
+
+        <label for="voice">🎙️ Select Voice:</label>
+        <select id="voice"></select><br>
+
+        <label for="speed">⚡ Speed:</label>
+        <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1">
+        <span id="speedValue">1x</span><br>
+
+        <button onclick="speakText()">▶ Read Aloud</button>
+        <button onclick="pauseSpeech()">⏸ Pause</button>
+        <button onclick="resumeSpeech()">▶ Resume</button>
+        <button onclick="stopSpeech()">⏹ Stop</button>
+    </div>
+
+    <script>
+        let speech = new SpeechSynthesisUtterance();
+        let voices = [];
+
+        function loadVoices() {
+            voices = speechSynthesis.getVoices();
+            let voiceSelect = document.getElementById("voice");
+            voiceSelect.innerHTML = "";
+
+            if (voices.length === 0) {
+                console.warn("No voices available! Try refreshing the page.");
+                return;
+            }
+
+            voices.forEach((voice, index) => {
+                let option = document.createElement("option");
+                option.value = index;
+                option.textContent = `${voice.name} (${voice.lang})`;
+                voiceSelect.appendChild(option);
+            });
+
+            if (voiceSelect.options.length > 0) {
+                voiceSelect.value = "0";
+            }
+        }
+
+        speechSynthesis.onvoiceschanged = loadVoices;
+        setTimeout(loadVoices, 1000);
+
+        function speakText() {
+            let textInput = document.getElementById("textInput");
+            let text = textInput.innerText.trim();
+
+            if (!text) {
+                alert("Please enter some text!");
+                return;
+            }
+
+            speechSynthesis.cancel();
+
+            speech.text = text;
+            speech.rate = parseFloat(document.getElementById("speed").value);
+            speech.lang = document.getElementById("language").value;
+
+            let selectedVoiceIndex = document.getElementById("voice").value;
+            if (voices[selectedVoiceIndex]) {
+                speech.voice = voices[selectedVoiceIndex];
+            }
+
+            let words = text.split(" ");
+            textInput.innerHTML = words.map(word => `<span>${word} </span>`).join("");
+            let spans = textInput.getElementsByTagName("span");
+            let wordIndex = 0;
+
+            speech.onboundary = (event) => {
+                if (event.name === "word" && wordIndex < spans.length) {
+                    for (let span of spans) span.style.color = "black";
+                    spans[wordIndex].style.color = `rgb(${255 - speech.rate * 100}, ${speech.rate * 100}, 255)`;
+					spans[wordIndex].scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+                    wordIndex++;
+					
+                }
+            };
+
+            speechSynthesis.speak(speech);
+        }
+
+        function pauseSpeech() { speechSynthesis.pause(); }
+        function resumeSpeech() { speechSynthesis.resume(); }
+        function stopSpeech() { speechSynthesis.cancel(); }
+
+        document.getElementById("fileInput").addEventListener("change", function(event) {
+            let file = event.target.files[0];
+            let reader = new FileReader();
+
+            if (!file) {
+                alert("No file selected!");
+                return;
+            }
+
+            if (file.type.startsWith("text") || file.name.endsWith(".txt")) {
+                reader.onload = function(e) {
+                    document.getElementById("textInput").innerText = e.target.result;
+                };
+                reader.readAsText(file);
+            } else if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+                reader.onload = function(e) {
+                    extractTextFromPDF(e.target.result);
+                };
+                reader.readAsArrayBuffer(file);
+            } else if (file.name.endsWith(".docx")) {
+                reader.onload = function(e) {
+                    extractTextFromDOCX(e.target.result);
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert("Unsupported file type! Please upload a text, PDF, or Word file.");
+            }
+        });
+
+        function extractTextFromPDF(pdfData) {
+            let pdfjsLib = window["pdfjsLib"];
+            let loadingTask = pdfjsLib.getDocument({ data: pdfData });
+
+            loadingTask.promise.then(function(pdf) {
+                let textPromises = [];
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    textPromises.push(pdf.getPage(i).then(page => 
+                        page.getTextContent().then(textContent => 
+                            textContent.items.map(item => item.str).join(" ")
+                        )
+                    ));
+                }
+
+                Promise.all(textPromises).then(pagesText => {
+                    document.getElementById("textInput").innerText = pagesText.join("\n\n");
+                });
+            });
+        }
+
+        function extractTextFromDOCX(docxData) {
+            let arrayBuffer = docxData;
+
+            mammoth.extractRawText({ arrayBuffer: arrayBuffer })
+                .then(function(result) {
+                    document.getElementById("textInput").innerText = result.value;
+                })
+                .catch(function(err) {
+                    alert("Error reading Word file: " + err.message);
+                });
+        }
+
+        document.getElementById("speed").addEventListener("input", function() {
+            document.getElementById("speedValue").innerText = this.value + "x";
+        });
+    </script>
+</body>
+</html>
